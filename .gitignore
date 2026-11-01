@@ -4,3 +4,8 @@ yolov9/runs/
 yolov9/*.pt
 __pycache__/
 .ipynb_checkpoints/
+docs/YCP.md
+docs/YPKB.md
+docs/PROJECT.MD
+docs/H_YOLO_SR.html
+*PRIVATE*.md
