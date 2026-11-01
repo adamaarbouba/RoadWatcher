@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How YOLO sees a road: an animated guide</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#EEF1F3;--s1:#fff;--s2:#F7F9FA;--tx:#17232C;--tx2:#51606B;--bd:#C5CED4;--ac:#0F8B8D;--ln:#E8B422;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11181D;--s1:#1A242B;--s2:#212D35;--tx:#E6ECEF;--tx2:#9AAAB5;--bd:#34444E;--ac:#3FC1C3;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#11181D;--s1:#1A242B;--s2:#212D35;--tx:#E6ECEF;--tx2:#9AAAB5;--bd:#34444E;--ac:#3FC1C3;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.6 "Space Grotesk",system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:32px 20px 64px}
+h1{font-size:clamp(28px,6vw,44px);line-height:1.1;margin:0 0 12px;font-weight:700;letter-spacing:-.02em}
+.lead{color:var(--tx2);max-width:60ch;margin:0 0 40px}
+section{padding:36px 0;border-top:3px dashed var(--ln)}
+h2{font-size:22px;margin:0 0 14px;font-weight:700}
+h2 b{color:var(--ac);margin-right:10px}
+.panel{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:16px}
+.doc{max-width:64ch;margin-top:18px}
+.doc p{margin:0 0 12px}
+.doc h3{font-size:15px;margin:16px 0 4px;font-weight:700}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+svg{display:block;width:100%;height:auto;border-radius:8px}
+.f{opacity:0;transition:opacity .5s}.f.on{opacity:1}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+button{font:inherit;font-size:14px;padding:6px 14px;border-radius:8px;border:1px solid var(--bd);background:var(--s2);color:var(--tx);cursor:pointer}
+button:hover{border-color:var(--ac)}button.on{border-color:var(--ac);background:var(--ac);color:#fff}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.big{font-size:26px;font-weight:700;line-height:1.2}.sm{font-size:13px;color:var(--tx2)}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:15px;word-break:break-all}
+.rd{display:flex;gap:24px;flex-wrap:wrap;margin-top:12px}
+.sq{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-top:12px}
+.sq i{font:normal 11px/26px inherit;text-align:center;border:1px solid var(--bd);border-radius:5px;color:var(--tx2);transition:background .2s}
+.sq i.p{background:#8FD3A4;color:#0B2A14;border-color:#8FD3A4}
+.rg{display:grid;grid-template-columns:auto 1fr 40px;gap:8px 12px;align-items:center;font-size:14px;margin-top:12px}
+.rg input{width:100%}.br{display:grid;grid-template-columns:90px 1fr 90px;gap:10px;align-items:center;font-size:14px;margin:8px 0}
+.tr{height:10px;background:var(--s2);border-radius:5px;margin:2px 0}.tr u,.tr s{display:block;height:10px;border-radius:5px;transition:width .4s}
+.tr u{background:#7F77DD}.tr s{background:#1D9E75}
+@media(prefers-reduced-motion:reduce){.f{transition:none}}
+</style></head><body><main>
+<h1>How YOLO sees a road</h1>
+<p class="lead">Seven animations, each followed by the explanation of what it shows. The animations only show how things behave; the reasoning is in the text underneath.</p>
+
+<section><h2><b>1</b>One look versus many</h2>
+<div class="panel"><div class="pair"><div><div id="c1a"></div><div class="big" id="n1">0</div></div><div><div id="c1b"></div><div class="big" id="n2">0</div></div></div>
+<div class="bar"><button onclick="run1()">Replay</button></div></div>
+<div class="doc"><h3>What you see</h3><p>Left: a window checks one region at a time and a counter climbs. Right: the whole image is processed once, a grid appears, and every vehicle is boxed together.</p>
+<h3>The idea</h3><p>YOLO stands for “You Only Look Once”. Older two-stage detectors proposed thousands of candidate regions and classified each one separately, which is accurate but slow. YOLO treats detection as a single regression problem: one forward pass of one network returns every box, class and confidence. It is fast enough for video and sees global context, so background is less likely to be mistaken for a vehicle.</p>
+<h3>In your project</h3><p>RoadVision AI works on traffic cameras, so speed per frame matters. This is why YOLOv9-C was chosen for the prototype.</p></div></section>
+
+<section><h2><b>2</b>An annotation is five numbers</h2>
+<div class="panel"><div id="c2"></div><div class="bar" id="b2"></div>
+<div class="sm" style="margin-top:12px">class &nbsp; x_center &nbsp; y_center &nbsp; width &nbsp; height</div><div class="mono" id="r2"></div></div>
+<div class="doc"><h3>What you see</h3><p>Pick a vehicle. The box moves onto it and the five numbers update live.</p>
+<h3>The idea</h3><p>Each line of a YOLO label file describes one object: a class id, then the box centre, width and height, all divided by the image size so they fall between 0 and 1. The class id comes from the order of names in data.yaml, so a mismatch there silently teaches the model wrong labels. Every vehicle needs its own line; an unlabelled vehicle teaches the model that it is background.</p>
+<h3>In your project</h3><p>Step 2 of the brief checks exactly this: five values per line, valid class ids, coordinates inside 0 to 1, and a label file for every image.</p></div></section>
+
+<section><h2><b>3</b>Grid cells and scales</h2>
+<div class="panel"><div id="c3"></div><div class="bar" id="v3"></div><div class="bar" id="s3"></div></div>
+<div class="doc"><h3>What you see</h3><p>The highlighted cell is the one containing the vehicle’s centre point. Switching scale changes the cell size.</p>
+<h3>The idea</h3><p>The grid decides which cell is responsible for predicting an object: the one holding its centre. YOLOv9 uses three grid scales. Coarse grids (large cells) suit big, close vehicles; fine grids (small cells) suit small, distant ones. Small objects are where most detectors lose accuracy, because at 640 pixels they cover very few cells.</p>
+<h3>In your project</h3><p>If motorbikes or far-away vehicles score poorly, scale and image resolution are the first things to examine in your critical analysis.</p></div></section>
+
+<section><h2><b>4</b>Candidates, confidence and NMS</h2>
+<div class="panel"><div id="c4"></div>
+<div class="rd"><div><div class="sm">Boxes on screen</div><div class="big" id="n4">0</div></div><div><div class="sm">Confidence threshold</div><div class="big" id="t4">0.001</div></div></div>
+<div class="rg"><label for="r4">Threshold</label><input type="range" id="r4" min="1" max="950" value="1"><span></span></div>
+<div class="bar"><button onclick="st4(1)">0.001</button><button onclick="st4(250)">0.25</button><label class="sm"><input type="checkbox" id="m4"> Apply NMS</label></div></div>
+<div class="doc"><h3>What you see</h3><p>The raw output is a cloud of overlapping boxes with scores. The slider hides weak ones; the checkbox merges duplicates.</p>
+<h3>The idea</h3><p>The network proposes thousands of boxes, most of them poor. Two filters clean this up. The confidence threshold drops boxes the model is not sure about. Non-maximum suppression (NMS) keeps only the best of several boxes that overlap on the same object. Note that NMS alone leaves low-score background guesses; the threshold alone leaves duplicates. You need both.</p>
+<h3>In your project</h3><p>Evaluation (step 6) uses a very low threshold, about 0.001, so mAP can sweep every score. Visualisation (step 7) uses 0.25 for readable images. Same model, very different pictures.</p></div></section>
+
+<section><h2><b>5</b>IoU and the ten thresholds</h2>
+<div class="panel"><div id="c5"></div>
+<div class="rd"><div><div class="sm">IoU</div><div class="big" id="i5v">0.00</div></div><div><div class="sm">At 0.5</div><div class="big" id="v5">-</div></div></div>
+<div class="rg"><label for="x5">Left/right</label><input type="range" id="x5" min="-100" max="100" value="30"><span></span>
+<label for="y5">Up/down</label><input type="range" id="y5" min="-50" max="50" value="15"><span></span>
+<label for="z5">Size</label><input type="range" id="z5" min="40" max="140" value="100"><span></span></div>
+<div class="sq" id="q5"></div></div>
+<div class="doc"><h3>What you see</h3><p>The blue prediction overlaps the dashed annotation. The amber area is the overlap, and each square lights up when the overlap clears that threshold.</p>
+<h3>The idea</h3><p>IoU (Intersection over Union) is overlap area divided by combined area, from 0 to 1. A prediction with the right class and IoU of at least 0.5 is a true positive; otherwise it is a false positive, and the missed vehicle is a false negative. Precision is true positives over all predictions, and recall is true positives over all real vehicles. mAP@50 uses the lenient 0.5 test, while mAP@50-95 averages ten thresholds up to 0.95, so it rewards tight boxes.</p>
+<h3>In your project</h3><p>Loose or inconsistent annotations lower IoU even for good predictions, which is one way label quality shows up in your scores.</p></div></section>
+
+<section><h2><b>6</b>What training does</h2>
+<div class="panel"><div id="c6"></div>
+<div class="rd"><div><div class="sm">Updates</div><div class="big" id="u6">0</div></div><div><div class="sm">IoU</div><div class="big" id="i6">0.00</div></div><div><div class="sm">Loss (1 - IoU)</div><div class="big" id="l6">1.00</div></div></div>
+<div class="bar"><button id="a6">Auto-run</button><button id="o6">One update</button><button id="r6">Reset</button></div></div>
+<div class="doc"><h3>What you see</h3><p>The blue guess moves toward the dashed annotation a little with each update, quickly at first and then more slowly.</p>
+<h3>The idea</h3><p>Each update takes a batch of images, predicts boxes, scores them against the annotations (the loss), and nudges the weights to lower it. One epoch is every training image seen once. With 2,297 images and batch size 4 that is about 575 updates per epoch, so roughly 5,750 over 10 epochs. This is fine-tuning: you start from COCO weights, where the backbone already knows edges and vehicle shapes, rebuild the output layers for your classes, and keep training everything on your data. The loss here is simplified; YOLOv9 combines box, class and DFL losses.</p>
+<h3>In your project</h3><p>If validation metrics are still rising at epoch 10, the model is under-trained, which justifies “train longer” as an improvement. Compare the curve in results.csv to this flattening shape.</p></div></section>
+
+<section><h2><b>7</b>Class imbalance</h2>
+<div class="panel"><div id="c7"></div>
+<div class="rg"><label for="s7">Wheelbarrow images</label><input type="range" id="s7" min="5" max="1200" value="40"><span id="v7"></span></div>
+<div class="sm" style="margin-top:8px"><b style="color:#7F77DD">&#9632;</b> training instances &nbsp; <b style="color:#1D9E75">&#9632;</b> detection quality (synthetic)</div></div>
+<div class="doc"><h3>What you see</h3><p>Drag the rare class’s example count up. Its detection quality rises, with diminishing returns, while the common classes stay high.</p>
+<h3>The idea</h3><p>The quality curve here is a synthetic illustration, not a measurement. The real point is that overall mAP hides weak classes: a dataset dominated by cars can score well overall while rare vehicles do poorly. Rare classes also have few test examples, so their metrics are statistically fragile. Visually similar classes add confusion, which the confusion matrix reveals.</p>
+<h3>In your project</h3><p>Count instances per class in step 2, then explain the per-class results in step 8 using those counts. Remedies to propose: more images of rare classes, targeted augmentation, class re-weighting, or merging classes that annotators cannot reliably tell apart. Label these as proposals to test, not results.</p></div></section>
+</main>
+<script>
+const $=i=>document.getElementById(i);
+const V=[['Car',30,108,60,26,'#1D9E75',[24,100,72,40]],['Bus',120,88,100,46,'#7F77DD',[114,80,112,60]],['Motorbike',240,112,34,22,'#D85A30',[234,104,46,36]]];
+const sc=x=>`<svg viewBox="0 0 300 180" role="img" aria-label="Road scene with a car, a bus and a motorbike"><rect width="300" height="180" fill="var(--s2)"/><rect y="100" width="300" height="80" fill="#B4B2A9" opacity=".45"/>`+V.map(v=>`<rect x="${v[1]}" y="${v[2]}" width="${v[3]}" height="${v[4]}" rx="4" fill="${v[5]}"/>`).join('')+(x||'')+`</svg>`;
+const bx=V.map(v=>`<rect x="${v[6][0]}" y="${v[6][1]}" width="${v[6][2]}" height="${v[6][3]}" fill="none" stroke="${v[5]}" stroke-width="2"/>`).join('');
+const iou=(a,b)=>{const i=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y)),u=a.w*a.h+b.w*b.h-i;return u>0?i/u:0};
+const tw=(o,to,ms,fn,dn)=>{const f={...o},t0=performance.now();(function s(t){const k=Math.min(1,(t-t0)/ms),e=k*(2-k);for(const q in to)o[q]=f[q]+(to[q]-f[q])*e;fn();k<1?requestAnimationFrame(s):dn&&dn()})(t0)};
+const sel=(id,arr,cb)=>{const b=$(id);arr.forEach((n,i)=>{const e=document.createElement('button');e.textContent=n;e.onclick=()=>{[...b.children].forEach(c=>c.classList.remove('on'));e.classList.add('on');cb(i)};b.appendChild(e)});b.children[0].click()};
+const GRID='<path d="M50 0V180M100 0V180M150 0V180M200 0V180M250 0V180M0 45H300M0 90H300M0 135H300" stroke="#378ADD" stroke-width=".8"/>';
+
+/* 1 */
+$('c1a').innerHTML=sc('<g class="tr"></g><rect class="w" width="80" height="70" fill="#EF9F27" fill-opacity=".15" stroke="#BA7517" stroke-width="2" style="transition:transform .15s linear"/><g class="f ob">'+bx+'</g>');
+$('c1b').innerHTML=sc('<rect class="f sw" width="300" height="180" fill="#378ADD" fill-opacity=".2"/><g class="f gr">'+GRID+'</g><g class="f yb">'+bx+'</g>');
+let T1=[];function run1(){T1.forEach(clearTimeout);T1=[];const A=$('c1a'),B=$('c1b'),w=A.querySelector('.w'),tr=A.querySelector('.tr');
+tr.innerHTML='';[A.querySelector('.ob'),...B.querySelectorAll('.f')].forEach(e=>e.classList.remove('on'));w.style.transform='';$('n1').textContent=0;$('n2').textContent=0;
+let k=0;for(const y of [0,55,110])for(const x of [0,55,110,165,220]){const i=k++;T1.push(setTimeout(()=>{w.style.transform=`translate(${x}px,${y}px)`;$('n1').textContent=i+1;tr.innerHTML+=`<rect x="${x}" y="${y}" width="80" height="70" fill="#EF9F27" fill-opacity=".06"/>`},400+i*260))}
+T1.push(setTimeout(()=>A.querySelector('.ob').classList.add('on'),4300));
+T1.push(setTimeout(()=>{B.querySelector('.sw').classList.add('on');$('n2').textContent=1},400));
+T1.push(setTimeout(()=>{B.querySelector('.sw').classList.remove('on');B.querySelector('.gr').classList.add('on')},1400));
+T1.push(setTimeout(()=>B.querySelector('.yb').classList.add('on'),2400))}
+run1();
+
+/* 2 */
+(()=>{const b={x:0,y:0,w:0,h:0};$('c2').innerHTML=sc('<rect id="bb" fill="none" stroke-width="2.5"/>');const r=$('bb');let cur=0;
+const d=()=>{r.setAttribute('x',b.x);r.setAttribute('y',b.y);r.setAttribute('width',b.w);r.setAttribute('height',b.h);$('r2').textContent=`${cur} ${((b.x+b.w/2)/300).toFixed(3)} ${((b.y+b.h/2)/180).toFixed(3)} ${(b.w/300).toFixed(3)} ${(b.h/180).toFixed(3)}`};
+Object.assign(b,{x:V[0][6][0],y:V[0][6][1],w:V[0][6][2],h:V[0][6][3]});
+sel('b2',V.map(v=>v[0]),i=>{cur=i;r.setAttribute('stroke',V[i][5]);const g=V[i][6];tw(b,{x:g[0],y:g[1],w:g[2],h:g[3]},500,d)})})();
+
+/* 3 */
+(()=>{let vi=0,cs=60;const draw=()=>{const g=V[vi][6],cx=g[0]+g[2]/2,cy=g[1]+g[3]/2;let p='';for(let x=cs;x<300;x+=cs)p+=`M${x} 0V180`;for(let y=cs;y<180;y+=cs)p+=`M0 ${y}H300`;
+$('c3').innerHTML=sc(`<path d="${p}" stroke="#378ADD" stroke-width=".8"/><rect x="${Math.floor(cx/cs)*cs}" y="${Math.floor(cy/cs)*cs}" width="${cs}" height="${cs}" fill="#378ADD" fill-opacity=".35"/><circle cx="${cx}" cy="${cy}" r="3.5" fill="#fff" stroke="#17232C"/>`)};
+sel('v3',V.map(v=>v[0]),i=>{vi=i;draw()});sel('s3',['Coarse cells','Medium cells','Fine cells'],i=>{cs=[60,30,15][i];draw()})})();
+
+/* 4 */
+(()=>{const D=[[22,98,76,44,.91,'#1D9E75',1],[30,104,66,36,.72,'#1D9E75',0],[14,92,90,52,.34,'#1D9E75',0],[112,78,116,64,.88,'#7F77DD',1],[120,86,104,56,.63,'#7F77DD',0],[104,72,128,72,.28,'#7F77DD',0],[232,102,50,40,.81,'#D85A30',1],[240,108,44,34,.47,'#D85A30',0],[150,20,50,40,.12,'#5F5E5A',1],[20,20,60,50,.08,'#5F5E5A',1],[60,140,50,30,.18,'#5F5E5A',1],[250,40,40,40,.22,'#5F5E5A',1]].sort((a,b)=>a[4]-b[4]);
+$('c4').innerHTML=sc('<g>'+D.map(d=>`<g class="f"><rect x="${d[0]}" y="${d[1]}" width="${d[2]}" height="${d[3]}" fill="${d[5]}" fill-opacity=".08" stroke="${d[5]}" stroke-width="1.5"/><text x="${d[0]+2}" y="${d[1]-3}" font-size="11" fill="${d[5]}">${d[4].toFixed(2)}</text></g>`).join('')+'</g>');
+const G=[...$('c4').querySelectorAll('g.f')],r=$('r4'),m=$('m4');
+const u=()=>{const t=r.value/1000;let n=0;G.forEach((g,i)=>{const on=D[i][4]>=t&&(!m.checked||D[i][6]);g.classList.toggle('on',on);n+=on});$('n4').textContent=n;$('t4').textContent=t.toFixed(3)};
+r.oninput=m.onchange=u;window.st4=v=>{r.value=v;u()};u()})();
+
+/* 5 */
+(()=>{const TH=[...Array(10)].map((_,i)=>.5+i*.05);$('q5').innerHTML=TH.map(t=>`<i>${t.toFixed(2)}</i>`).join('');
+$('c5').innerHTML='<svg viewBox="0 0 400 260" role="img" aria-label="Predicted box and annotation box"><rect width="400" height="260" fill="var(--s2)"/><rect id="p5" fill="#378ADD" fill-opacity=".15" stroke="#185FA5" stroke-width="2"/><rect id="g5" x="80" y="70" width="160" height="100" fill="none" stroke="#3B6D11" stroke-width="2" stroke-dasharray="6 4"/><rect id="n5" fill="#EF9F27" fill-opacity=".55"/></svg>';
+const G={x:80,y:70,w:160,h:100},u=()=>{const s=$('z5').value/100,w=160*s,h=100*s,P={x:160+ +$('x5').value-w/2,y:120+ +$('y5').value-h/2,w,h};
+for(const k in P)$('p5').setAttribute({x:'x',y:'y',w:'width',h:'height'}[k],P[k]);
+const x1=Math.max(G.x,P.x),y1=Math.max(G.y,P.y);$('n5').setAttribute('x',x1);$('n5').setAttribute('y',y1);$('n5').setAttribute('width',Math.max(0,Math.min(G.x+G.w,P.x+P.w)-x1));$('n5').setAttribute('height',Math.max(0,Math.min(G.y+G.h,P.y+P.h)-y1));
+const v=iou(P,G);$('i5v').textContent=v.toFixed(2);$('v5').textContent=v>=.5?'Hit':'Miss';[...$('q5').children].forEach((e,i)=>e.classList.toggle('p',v>=TH[i]))};
+['x5','y5','z5'].forEach(i=>$(i).oninput=u);u()})();
+
+/* 6 */
+(()=>{const G={x:24,y:100,w:72,h:40},P0={x:170,y:20,w:90,h:50};let P={...P0},n=0,busy=0,tm=null;
+$('c6').innerHTML=sc(`<rect x="24" y="100" width="72" height="40" fill="none" stroke="#3B6D11" stroke-width="2" stroke-dasharray="5 3"/><rect id="b6" fill="#378ADD" fill-opacity=".15" stroke="#185FA5" stroke-width="2"/>`);
+const d=()=>{const r=$('b6');r.setAttribute('x',P.x);r.setAttribute('y',P.y);r.setAttribute('width',P.w);r.setAttribute('height',P.h);const v=iou(P,G);$('u6').textContent=n;$('i6').textContent=v.toFixed(2);$('l6').textContent=(1-v).toFixed(2)};
+const one=cb=>{if(busy)return;busy=1;const j=(1-iou(P,G))*6,t={x:P.x+(G.x-P.x)*.3+(Math.random()-.5)*j,y:P.y+(G.y-P.y)*.3+(Math.random()-.5)*j,w:P.w+(G.w-P.w)*.3,h:P.h+(G.h-P.h)*.3};tw(P,t,450,d,()=>{n++;busy=0;d();cb&&cb()})};
+const stop=()=>{clearInterval(tm);tm=null;$('a6').textContent='Auto-run'};
+$('o6').onclick=()=>{stop();one()};$('r6').onclick=()=>{stop();setTimeout(()=>{n=0;busy=0;P={...P0};d()},60)};
+$('a6').onclick=()=>{if(tm){stop();return}$('a6').textContent='Pause';tm=setInterval(()=>{if(iou(P,G)>.93){stop();return}one()},700)};d()})();
+
+/* 7 */
+(()=>{const N=['Car','Bus','Motorbike','Wheelbarrow'],C=[1200,500,150,40],s=$('s7');
+const u=()=>{C[3]=+s.value;$('v7').textContent=C[3];$('c7').innerHTML=N.map((n,i)=>{const a=.95*(1-Math.exp(-C[i]/220));return `<div class="br"><span>${n}</span><div><div class="tr"><u style="width:${C[i]/12}%"></u></div><div class="tr"><s style="width:${a*100}%"></s></div></div><span class="sm">${C[i]} | ${a.toFixed(2)}</span></div>`}).join('')};s.oninput=u;u()})();
+</script></body></html>
