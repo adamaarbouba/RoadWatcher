@@ -7,15 +7,16 @@ This document explains every single cell in [`notebooks/01_prepare_data.ipynb`](
 ## Overview
 
 The purpose of this notebook is to take the raw road traffic vehicle dataset (from Bangladeshi roads) and prepare it for YOLOv9 training:
-1. Check that PyTorch and GPU are accessible.
-2. Inspect the raw files and count how many images and label files exist.
-3. Make a safe working copy in `data_clean/` (so raw data is never touched).
-4. Remove empty labels, corrupt images, and unmatched files.
-5. Move exactly 405 images from training to a dedicated `test/` folder with seed 42 (so results are 100% reproducible).
-6. Verify the split sizes match the project brief (2,297 train, 298 valid, 405 test).
-7. Check for duplicate images using cryptographic hashing (MD5).
-8. Generate the dataset configuration file (`roadwatcher.yaml`).
-9. Plot the class distribution of vehicles and draw sample bounding boxes.
+1. Setup Google Colab environment (cloning repo and setting path).
+2. Check that PyTorch and GPU are accessible.
+3. Inspect the raw files and count how many images and label files exist.
+4. Make a safe working copy in `data_clean/` (so raw data is never touched).
+5. Remove empty labels, corrupt images, and unmatched files.
+6. Move exactly 405 images from training to a dedicated `test/` folder with seed 42 (so results are 100% reproducible).
+7. Verify the split sizes match the project brief (2,297 train, 298 valid, 405 test).
+8. Check for duplicate images using cryptographic hashing (MD5).
+9. Generate the dataset configuration file (`roadwatcher.yaml`).
+10. Plot the class distribution of vehicles and draw sample bounding boxes.
 
 ---
 
@@ -23,20 +24,21 @@ The purpose of this notebook is to take the raw road traffic vehicle dataset (fr
 
 ```mermaid
 flowchart TD
-    C0["Cell 0 (Markdown): Title"] --> C1["Cell 1: Imports"]
-    C1 --> C2["Cell 2: PyTorch & GPU Check"]
-    C2 --> C3["Cell 3: Project Paths"]
-    C3 --> C4["Cell 4: Inspect Source Folders"]
-    C4 --> C5["Cell 5: Count Raw Images & Labels"]
-    C5 --> C6["Cell 6: Copy to data_clean/"]
-    C6 --> C7["Cell 7: Clean Empty/Corrupt Files"]
-    C7 --> C8["Cell 8: Match Images & Labels"]
-    C8 --> C9["Cell 9: Create Test Split (Seed 42)"]
-    C9 --> C10["Cell 10: Verify Final Counts (2297/298/405)"]
-    C10 --> C11["Cell 11: MD5 Duplicate Check"]
-    C11 --> C12["Cell 12: Generate roadwatcher.yaml"]
-    C12 --> C13["Cell 13: Object Counts & Bar Charts"]
-    C13 --> C14["Cell 14: Visualize 6 Sample Bounding Boxes"]
+    C0["Cell 0 (Markdown): Title"] --> C1["Cell 1: Colab Setup"]
+    C1 --> C2["Cell 2: Imports"]
+    C2 --> C3["Cell 3: PyTorch & GPU Check"]
+    C3 --> C4["Cell 4: Project Paths"]
+    C4 --> C5["Cell 5: Inspect Source Folders"]
+    C5 --> C6["Cell 6: Count Raw Images & Labels"]
+    C6 --> C7["Cell 7: Copy to data_clean/"]
+    C7 --> C8["Cell 8: Clean Empty/Corrupt Files"]
+    C8 --> C9["Cell 9: Match Images & Labels"]
+    C9 --> C10["Cell 10: Create Test Split (Seed 42)"]
+    C10 --> C11["Cell 11: Verify Final Counts (2297/298/405)"]
+    C11 --> C12["Cell 12: MD5 Duplicate Check"]
+    C12 --> C13["Cell 13: Generate roadwatcher.yaml"]
+    C13 --> C14["Cell 14: Object Counts & Bar Charts"]
+    C14 --> C15["Cell 15: Visualize 6 Sample Bounding Boxes"]
 ```
 
 ---
@@ -48,7 +50,21 @@ flowchart TD
 
 ---
 
-### Cell 1: Imports
+### Cell 1: Colab Setup
+- **Type:** Code
+- **What it does:**
+  - Clones the GitHub repository `https://github.com/adamaarbouba/RoadWatcher.git` when running on Google Colab.
+  - Navigates into the `/content/RoadWatcher/notebooks` directory.
+  - Prints the current working directory to confirm the path.
+- **Why it matters:** When opening this notebook directly in Google Colab, Colab starts in an empty `/content` folder. This cell automatically downloads the code and dataset and sets up the right working folder. If running locally, this step is skipped automatically.
+- **Expected output:**
+  ```text
+  Working directory: /content/RoadWatcher/notebooks
+  ```
+
+---
+
+### Cell 2: Imports
 - **Type:** Code
 - **What it does:** Imports standard Python libraries:
   - `os`, `shutil`: Creating folders, copying, and moving files.
@@ -64,9 +80,9 @@ flowchart TD
 
 ---
 
-### Cell 2: Check GPU and PyTorch
+### Cell 3: Check GPU and PyTorch
 - **Type:** Code
-- **What it does:** Checks `torch.__version__` and whether CUDA (GPU support) is active via `torch.cuda.is_available()`. If a GPU is present, it prints its name (e.g., NVIDIA RTX 3090, T4, etc.).
+- **What it does:** Checks `torch.__version__` and whether CUDA (GPU support) is active via `torch.cuda.is_available()`. If a GPU is present, it prints its name (e.g., NVIDIA T4, V100, A100, RTX 3090, etc.).
 - **Why it matters:** Object detection models require GPU acceleration for fast training. Verifying this early avoids running into slow CPU execution later.
 - **Expected output:**
   ```text
@@ -77,18 +93,18 @@ flowchart TD
 
 ---
 
-### Cell 3: Project Paths
+### Cell 4: Project Paths
 - **Type:** Code
 - **What it does:** Defines key directories using `Path`:
   - `project_dir`: Root folder of the repository.
   - `src_dir`: `trafic_data/` (the original raw dataset).
   - `data_dir`: `data_clean/` (the destination folder where cleaned data will be placed).
-- **Why it matters:** Using centralized path variables prevents hardcoded strings and makes the code work smoothly across any machine (local or Vast.ai).
+- **Why it matters:** Using centralized path variables prevents hardcoded strings and makes the code work smoothly across any machine (Colab, cloud GPU, or local).
 - **Expected output:** Prints the absolute paths to project, source data, and clean dataset folders.
 
 ---
 
-### Cell 4: Inspect Source Dataset Folders
+### Cell 5: Inspect Source Dataset Folders
 - **Type:** Code
 - **What it does:** Uses `os.listdir()` to list all files and subfolders inside `trafic_data/`.
 - **Why it matters:** Good data practice (EDA). Before modifying any files, you want to inspect what the raw download looks like (folders like `train/`, `valid/`, and config files like `data_1.yaml`).
@@ -102,7 +118,7 @@ flowchart TD
 
 ---
 
-### Cell 5: Count Images and Labels in Raw Dataset
+### Cell 6: Count Images and Labels in Raw Dataset
 - **Type:** Code
 - **What it does:** Counts how many image files (`.jpg`, `.png`, etc.) and how many `.txt` annotation files exist inside `train/` and `valid/`.
 - **Why it matters:** Verifies the baseline dataset size before any preprocessing. In the raw dataset, there are 2,704 training images and 300 validation images.
@@ -114,7 +130,7 @@ flowchart TD
 
 ---
 
-### Cell 6: Copy Raw Data to data_clean/
+### Cell 7: Copy Raw Data to data_clean/
 - **Type:** Code
 - **What it does:** Uses `shutil.copytree()` to duplicate `trafic_data/` into `data_clean/`. Skips old `.cache` files. If `data_clean/` already exists, it skips copying so it doesn't overwrite your work if you re-run the cell.
 - **Why it matters:** **Safety.** Never clean or delete files in your original raw dataset directly. Working in a copy ensures you can always start over if something goes wrong.
@@ -125,7 +141,7 @@ flowchart TD
 
 ---
 
-### Cell 7: Check for Empty Labels and Corrupt Images, and Clean Them
+### Cell 8: Check for Empty Labels and Corrupt Images, and Clean Them
 - **Type:** Code
 - **What it does:** Loops through each image and label:
   1. Checks if the label file exists and is not empty (`read_text().strip() != ""`).
@@ -140,7 +156,7 @@ flowchart TD
 
 ---
 
-### Cell 8: Check Image and Label Matching
+### Cell 9: Check Image and Label Matching
 - **Type:** Code
 - **What it does:** Compares the set of image file stems (filenames without extension) with the set of label file stems using set subtraction (`images - labels` and `labels - images`). If any orphan image or orphan label exists, it is deleted.
 - **Why it matters:** In YOLO, every image MUST have a matching `.txt` label file with the exact same stem name. Having an image without a label or a label without an image causes mismatches.
@@ -152,7 +168,7 @@ flowchart TD
 
 ---
 
-### Cell 9: Create Reproducible Test Split (405 Images from Train)
+### Cell 10: Create Reproducible Test Split (405 Images from Train)
 - **Type:** Code
 - **What it does:**
   1. Creates the `test/images/` and `test/labels/` directories.
@@ -168,7 +184,7 @@ flowchart TD
 
 ---
 
-### Cell 10: Verify Final Split Counts
+### Cell 11: Verify Final Split Counts
 - **Type:** Code
 - **What it does:** Counts the images and labels in each split (`train`, `valid`, `test`) and compares them against the project brief requirements:
   - Train: 2,297 images
@@ -184,7 +200,7 @@ flowchart TD
 
 ---
 
-### Cell 11: Check for Exact Duplicate Images Using MD5 Hash
+### Cell 12: Check for Exact Duplicate Images Using MD5 Hash
 - **Type:** Code
 - **What it does:** Computes the MD5 cryptographic checksum of every image across all splits. If two files have the same MD5 hash, they are 100% identical byte-for-byte.
 - **Why it matters:** **Data leakage prevention.** If identical images exist in both the training set and the test set, the model might simply "memorize" those images rather than generalize, giving falsely high test scores. This cell verifies whether cross-split duplicates exist.
@@ -195,7 +211,7 @@ flowchart TD
 
 ---
 
-### Cell 12: Read Class Names and Create roadwatcher.yaml
+### Cell 13: Read Class Names and Create roadwatcher.yaml
 - **Type:** Code
 - **What it does:** Reads `data_1.yaml` from the source directory to retrieve the 21 vehicle class names and class count (`nc: 21`). Then writes a clean configuration file called `roadwatcher.yaml` in the project root:
   - `path`: Absolute path to `data_clean/`
@@ -209,7 +225,7 @@ flowchart TD
 
 ---
 
-### Cell 13: Count Objects Per Class and Plot Distribution
+### Cell 14: Count Objects Per Class and Plot Distribution
 - **Type:** Code
 - **What it does:** Loops through all `.txt` label files in `train`, `valid`, and `test`. For each line, it reads the class ID and increments a counter. It prints the total object count per class and displays a Matplotlib bar chart for each split.
 - **Why it matters:** **Class imbalance analysis.** In real-world road traffic datasets, common classes (like `car`, `bus`, `rickshaw`, `three wheelers -CNG-`) have thousands of examples, while rare classes (like `ambulance`, `garbagevan`, `policecar`) have fewer than 50 examples. Understanding this imbalance explains why the model will perform better on some classes than others.
@@ -217,7 +233,7 @@ flowchart TD
 
 ---
 
-### Cell 14: Visualize 6 Sample Images with Bounding Boxes
+### Cell 15: Visualize 6 Sample Images with Bounding Boxes
 - **Type:** Code
 - **What it does:** Loads 6 training images using PIL, reads their corresponding YOLO bounding box labels:
   - YOLO format is: `class_id  x_center  y_center  width  height` (normalized between 0 and 1).

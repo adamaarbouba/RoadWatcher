@@ -959,16 +959,27 @@ class DetectMultiBackend(nn.Module):
     @staticmethod
     def _model_type(p='path/to/model.pt'):
         # Return model type from model path, i.e. path='path/to/model.onnx' -> type=onnx
-        # types = [pt, jit, onnx, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle]
-        from export import export_formats
-        from utils.downloads import is_url
-        sf = list(export_formats().Suffix)  # export suffixes
-        if not is_url(p, check=False):
-            check_suffix(p, sf)  # checks
-        url = urlparse(p)  # if url may be Triton inference server
-        types = [s in Path(p).name for s in sf]
-        types[8] &= not types[9]  # tflite &= not edgetpu
-        triton = not any(types) and all([any(s in url.scheme for s in ["http", "grpc"]), url.netloc])
+        # 13 types: [pt, jit, onnx, onnx_end2end, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle]
+        name = Path(p).name
+        pt = name.endswith('.pt')
+        jit = name.endswith('.torchscript')
+        onnx_end2end = '_end2end.onnx' in name
+        onnx = name.endswith('.onnx') and not onnx_end2end
+        xml = '_openvino_model' in name
+        engine = name.endswith('.engine')
+        coreml = name.endswith('.mlmodel')
+        saved_model = '_saved_model' in name
+        pb = name.endswith('.pb')
+        edgetpu = '_edgetpu.tflite' in name
+        tflite = name.endswith('.tflite') and not edgetpu
+        tfjs = '_web_model' in name
+        paddle = '_paddle_model' in name
+        types = [pt, jit, onnx, onnx_end2end, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle]
+        try:
+            url = urlparse(p)
+            triton = not any(types) and all([any(s in url.scheme for s in ["http", "grpc"]), url.netloc])
+        except Exception:
+            triton = False
         return types + [triton]
 
     @staticmethod

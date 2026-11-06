@@ -1,20 +1,21 @@
 # Notebook 02: Train and Evaluate YOLOv9-C — Cell-by-Cell Guide
 
-This document explains every single cell in [`notebooks/02_train_and_evaluate.ipynb`](file:///d:/Coding/RoadWatcher/notebooks/02_train_and_evaluate.ipynb) in clear, simple terms. It covers what each cell does, why it is needed, key machine learning concepts, and what output to expect when running on a GPU machine (e.g. Vast.ai).
+This document explains every single cell in [`notebooks/02_train_and_evaluate.ipynb`](file:///d:/Coding/RoadWatcher/notebooks/02_train_and_evaluate.ipynb) in clear, simple terms. It covers what each cell does, why it is needed, key machine learning concepts, and what output to expect when running on a GPU machine (e.g. Google Colab).
 
 ---
 
 ## Overview
 
 This notebook handles the model training and evaluation phase of the RoadWatcher project:
-1. Verifies that PyTorch can access the GPU.
-2. Installs required packages from `requirements.txt`.
-3. Sets up working directories and downloads pretrained YOLOv9-C weights (`yolov9-c.pt`).
-4. Trains the YOLOv9-C model on the prepared vehicle dataset using `train_dual.py`.
-5. Visualizes training curves (losses, precision, recall, mAP) from `results.png`.
-6. Evaluates the trained model on the 405 test images with `val_dual.py`.
-7. Generates visual detection predictions with `detect_dual.py` and displays sample test images.
-8. Highlights critical checkpoints (`best.pt`, `last.pt`) to download before stopping the GPU instance.
+1. Setup Google Colab environment and repository paths.
+2. Verifies that PyTorch can access the GPU.
+3. Installs required packages from `requirements.txt`.
+4. Sets up working directories and downloads pretrained YOLOv9-C weights (`yolov9-c.pt`).
+5. Trains the YOLOv9-C model on the prepared vehicle dataset using `train_dual.py`.
+6. Visualizes training curves (losses, precision, recall, mAP) from `results.png`.
+7. Evaluates the trained model on the 405 test images with `val_dual.py`.
+8. Generates visual detection predictions with `detect_dual.py` and displays sample test images.
+9. Highlights critical checkpoints (`best.pt`, `last.pt`) and allows saving `best.pt` directly to Google Drive.
 
 ---
 
@@ -22,19 +23,21 @@ This notebook handles the model training and evaluation phase of the RoadWatcher
 
 ```mermaid
 flowchart TD
-    C0["Cell 0 (Markdown): Title & Overview"] --> C1["Cell 1: Check GPU & PyTorch"]
-    C1 --> C2["Cell 2: Install requirements.txt"]
-    C2 --> C3["Cell 3: Setup Project Paths & chdir"]
-    C3 --> C4["Cell 4: Download yolov9-c.pt"]
-    C4 --> C5["Cell 5 (Markdown): Training Fixed Settings"]
-    C5 --> C6["Cell 6: Run train_dual.py (10 epochs)"]
-    C6 --> C7["Cell 7: Check Checkpoints & Display results.png"]
-    C7 --> C8["Cell 8 (Markdown): Evaluation Concept (mAP)"]
-    C8 --> C9["Cell 9: Run val_dual.py on Test Set"]
-    C9 --> C10["Cell 10 (Markdown): Visual Predictions Concept"]
-    C10 --> C11["Cell 11: Run detect_dual.py (conf 0.25)"]
-    C11 --> C12["Cell 12: Display 6 Sample Predictions"]
-    C12 --> C13["Cell 13 (Markdown): Download Checklist"]
+    C0["Cell 0 (Markdown): Title & Overview"] --> C1["Cell 1: Colab Setup"]
+    C1 --> C2["Cell 2: Check GPU & PyTorch"]
+    C2 --> C3["Cell 3: Install requirements.txt"]
+    C3 --> C4["Cell 4: Setup Project Paths & chdir"]
+    C4 --> C5["Cell 5: Download yolov9-c.pt"]
+    C5 --> C6["Cell 6 (Markdown): Training Fixed Settings"]
+    C6 --> C7["Cell 7: Run train_dual.py (10 epochs)"]
+    C7 --> C8["Cell 8: Check Checkpoints & Display results.png"]
+    C8 --> C9["Cell 9 (Markdown): Evaluation Concept (mAP)"]
+    C9 --> C10["Cell 10: Run val_dual.py on Test Set"]
+    C10 --> C11["Cell 11 (Markdown): Visual Predictions Concept"]
+    C11 --> C12["Cell 12: Run detect_dual.py (conf 0.25)"]
+    C12 --> C13["Cell 13: Display 6 Sample Predictions"]
+    C13 --> C14["Cell 14 (Markdown): Download Checklist"]
+    C14 --> C15["Cell 15: Save best.pt to Google Drive"]
 ```
 
 ---
@@ -46,23 +49,37 @@ flowchart TD
 
 ---
 
-### Cell 1: Imports and Environment Check
+### Cell 1: Colab Setup
+- **Type:** Code
+- **What it does:**
+  - Clones the GitHub repository `https://github.com/adamaarbouba/RoadWatcher.git` when running on Google Colab.
+  - Navigates into `/content/RoadWatcher/notebooks`.
+  - Prints the current working directory to confirm the path.
+- **Why it matters:** Guarantees that when running on Google Colab, the environment has all code, datasets, and configs ready in the current runtime.
+- **Expected output:**
+  ```text
+  Working directory: /content/RoadWatcher/notebooks
+  ```
+
+---
+
+### Cell 2: Imports and Environment Check
 - **Type:** Code
 - **What it does:** Imports standard libraries (`os`, `sys`, `urllib.request`, `pathlib.Path`, `torch`) and checks CUDA availability:
   - Prints PyTorch version.
   - Checks if a GPU is accessible via `torch.cuda.is_available()`.
-  - Prints the GPU device model name (e.g., RTX 3090, RTX 4090, A100).
+  - Prints the GPU device model name (e.g., NVIDIA T4, V100, A100, RTX 3090).
 - **Why it matters:** YOLOv9-C requires a CUDA-capable GPU. Running training on a CPU would take days, so verifying the GPU is essential before starting.
 - **Expected output:**
   ```text
   PyTorch version: 2.x.x
   CUDA available:  True
-  GPU device:      NVIDIA RTX ...
+  GPU device:      NVIDIA ...
   ```
 
 ---
 
-### Cell 2: Install Dependencies
+### Cell 3: Install Dependencies
 - **Type:** Code
 - **What it does:** Runs `!pip install -q -r ../yolov9/requirements.txt` to install all necessary packages (PyYAML, torchvision, pandas, seaborn, tqdm, etc.) into the active Jupyter kernel.
 - **Why it matters:** Ensures all libraries required by YOLOv9 scripts are installed and compatible.
@@ -70,7 +87,7 @@ flowchart TD
 
 ---
 
-### Cell 3: Setup Paths and Working Directory
+### Cell 4: Setup Paths and Working Directory
 - **Type:** Code
 - **What it does:**
   - Defines paths to `project_dir`, `yolo_dir`, `data_yaml` (`roadwatcher.yaml`), and `data_dir` (`data_clean/`).
@@ -87,7 +104,7 @@ flowchart TD
 
 ---
 
-### Cell 4: Download Pretrained Weights (yolov9-c.pt)
+### Cell 5: Download Pretrained Weights (yolov9-c.pt)
 - **Type:** Code
 - **What it does:** Checks if `yolov9-c.pt` already exists in `yolov9/`. If not, it automatically downloads the official release weights from GitHub using `urllib.request.urlretrieve()`.
 - **Why it matters:** **Transfer Learning.** Starting training from scratch (random numbers) on a small dataset would take hundreds of epochs and perform poorly. By using pretrained weights trained on the massive COCO dataset, the model already knows how to detect edges, shapes, and general objects. Training on our data fine-tunes that knowledge for our specific 21 vehicle classes.
@@ -99,7 +116,7 @@ flowchart TD
 
 ---
 
-### Cell 5: Training Setup & Fixed Parameters
+### Cell 6: Training Setup & Fixed Parameters
 - **Type:** Markdown
 - **What it does:** Documents the fixed hyperparameters defined by the project brief:
   - Architecture: `models/detect/yolov9-c.yaml`
@@ -112,7 +129,7 @@ flowchart TD
 
 ---
 
-### Cell 6: Launch Training with train_dual.py
+### Cell 7: Launch Training with train_dual.py
 - **Type:** Code
 - **What it does:** Executes the main YOLOv9 training command:
   ```bash
@@ -142,7 +159,7 @@ flowchart TD
 
 ---
 
-### Cell 7: Check Checkpoints and Display Training Loss Curves
+### Cell 8: Check Checkpoints and Display Training Loss Curves
 - **Type:** Code
 - **What it does:**
   - Verifies that `best.pt` (weights from the epoch with highest validation score) and `last.pt` (final epoch weights) were saved in `runs/train/roadwatcher_yolov9c/weights/`.
@@ -152,7 +169,7 @@ flowchart TD
 
 ---
 
-### Cell 8: Evaluation Concept Header (mAP)
+### Cell 9: Evaluation Concept Header (mAP)
 - **Type:** Markdown
 - **What it does:** Explains the difference between evaluation and visualization:
   - Evaluation uses a very low confidence threshold (`--conf-thres 0.001`) to assess all candidate boxes and compute accurate Precision-Recall curves and mean Average Precision (mAP).
@@ -160,7 +177,7 @@ flowchart TD
 
 ---
 
-### Cell 9: Evaluate on the 405 Test Images
+### Cell 10: Evaluate on the 405 Test Images
 - **Type:** Code
 - **What it does:** Runs `val_dual.py` on the test split:
   ```bash
@@ -182,14 +199,14 @@ flowchart TD
 
 ---
 
-### Cell 10: Visual Predictions Concept
+### Cell 11: Visual Predictions Concept
 - **Type:** Markdown
 - **What it does:** Explains that for visual display, we use `--conf-thres 0.25` so that only high-confidence bounding boxes are drawn on images for human inspection.
 - **Why it matters:** At confidence 0.001, images would be covered in thousands of faint candidate boxes. A threshold of 0.25 produces clean, human-readable images.
 
 ---
 
-### Cell 11: Run Inference on Test Images
+### Cell 12: Run Inference on Test Images
 - **Type:** Code
 - **What it does:** Executes `detect_dual.py`:
   ```bash
@@ -209,7 +226,7 @@ flowchart TD
 
 ---
 
-### Cell 12: Display Sample Predictions
+### Cell 13: Display Sample Predictions
 - **Type:** Code
 - **What it does:** Finds all generated prediction images in `runs/detect/roadwatcher_test/` and displays the first 6 images inline using IPython's `display(DisplayImage(...))`.
 - **Why it matters:** Qualitative evaluation (visual inspection). Allows you to inspect:
@@ -220,10 +237,22 @@ flowchart TD
 
 ---
 
-### Cell 13: Summary of Important Outputs to Download
+### Cell 14: Summary of Important Outputs to Download
 - **Type:** Markdown
-- **What it does:** Reminds the user to download essential files before destroying their Vast.ai instance:
+- **What it does:** Reminds the user to download essential files before ending their Colab session:
   1. `best.pt` and `last.pt` checkpoints.
   2. `results.png` (training plots).
   3. Visual prediction images from `runs/detect/roadwatcher_test/`.
-- **Why it matters:** Cloud instances on Vast.ai are ephemeral; all data is wiped when an instance is terminated. Downloading key artifacts ensures you preserve your results for your report or presentation.
+- **Why it matters:** Cloud instances on Google Colab are ephemeral; session files are erased when the runtime disconnects. Downloading key artifacts or saving to Google Drive ensures results are permanently preserved.
+
+---
+
+### Cell 15: Save best.pt to Google Drive (optional)
+- **Type:** Code
+- **What it does:** Mounts your Google Drive via `google.colab.drive.mount()` and copies the trained weights `best.pt` into `/content/drive/MyDrive/RoadWatcher/best.pt`.
+- **Why it matters:** Ensures you never lose hours of training if your Colab session times out or disconnects. You can reload this saved model anytime in Notebook 03 or download it locally.
+- **Expected output:**
+  ```text
+  Mounted at /content/drive
+  Copied best.pt to Google Drive: /content/drive/MyDrive/RoadWatcher/best.pt
+  ```
